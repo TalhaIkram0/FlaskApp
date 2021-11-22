@@ -1,8 +1,7 @@
 from flask import Blueprint, request, session
 from werkzeug.security import check_password_hash, generate_password_hash
 
-from app.db import get_db
-
+from app import User, db
 
 bp = Blueprint('auth', __name__, url_prefix='/auth')
 
@@ -10,18 +9,17 @@ bp = Blueprint('auth', __name__, url_prefix='/auth')
 def login():
     username = request.form['username']
     password = request.form['password']
-    db = get_db()
     error = None
-    user = db.execute('SELECT * FROM user WHERE username = ?', (username,)).fetchone()
+    user = User.query.filter_by(username=username).first()
 
     if user is None:
         error = 'Incorrect username.'
-    elif not check_password_hash(user['password'], password):
+    elif not check_password_hash(user.password, password):
         error = 'Incorrect password.'
 
     if error is None:
         session.clear()
-        session['username'] = user['username']
+        session['username'] = user.username
         return "User was logged in"
 
     return f"login error: {error}"
@@ -35,7 +33,6 @@ def logout():
 def register():
     username = request.form['username']
     password = request.form['password']
-    db = get_db()
     error = None
         
     if not username:
@@ -45,13 +42,11 @@ def register():
 
     if error is None:
         try:
-            db.execute(
-                "INSERT INTO user (username, password) VALUES (?, ?)",
-                (username, generate_password_hash(password)),
-            )
-            db.commit()
+            user = User(username, generate_password_hash(password))
+            db.session.add(user)
+            db.session.commit()
             return f"User was created successfully"
-        except db.IntegrityError:
-            error = f"User {username} is already registered."
+        except Exception as e:
+            error = e
 
     return f"Error creating user: {error}"
